@@ -1,0 +1,301 @@
+import React, { useState, useEffect } from 'react';
+import { Play, Square, Plus, Trash2, Download, Settings, Radio, Circle } from 'lucide-react';
+
+export default function StreamRecorder() {
+  const [streamers, setStreamers] = useState([]);
+  const [newUrl, setNewUrl] = useState('');
+  const [recording, setRecording] = useState({});
+  const [settings, setSettings] = useState({
+    outputFolder: 'C:\\Grabaciones',
+    quality: 'best',
+    autoRecord: false
+  });
+  const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const streamersData = await window.storage.get('streamers');
+        const settingsData = await window.storage.get('settings');
+        
+        if (streamersData) {
+          setStreamers(JSON.parse(streamersData.value));
+        }
+        if (settingsData) {
+          setSettings(JSON.parse(settingsData.value));
+        }
+      } catch (error) {
+        console.log('Datos iniciales no encontrados, usando valores por defecto');
+      }
+    };
+    loadData();
+  }, []);
+
+  const saveStreamers = async (data) => {
+    try {
+      await window.storage.set('streamers', JSON.stringify(data));
+    } catch (error) {
+      console.error('Error guardando streamers:', error);
+    }
+  };
+
+  const saveSettings = async (data) => {
+    try {
+      await window.storage.set('settings', JSON.stringify(data));
+    } catch (error) {
+      console.error('Error guardando configuración:', error);
+    }
+  };
+
+  const extractStreamerName = (url) => {
+    const match = url.match(/stripchat\.com\/([^\/\?]+)/);
+    return match ? match[1] : 'Desconocido';
+  };
+
+  const addStreamer = () => {
+    if (!newUrl.trim()) return;
+    
+    const name = extractStreamerName(newUrl);
+    const newStreamer = {
+      id: Date.now(),
+      name,
+      url: newUrl,
+      isLive: false,
+      lastChecked: null,
+      recordings: []
+    };
+    
+    const updated = [...streamers, newStreamer];
+    setStreamers(updated);
+    saveStreamers(updated);
+    setNewUrl('');
+  };
+
+  const removeStreamer = (id) => {
+    const updated = streamers.filter(s => s.id !== id);
+    setStreamers(updated);
+    saveStreamers(updated);
+  };
+
+  const toggleRecording = (id) => {
+    setRecording(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+    
+    const streamer = streamers.find(s => s.id === id);
+    if (streamer && !recording[id]) {
+      const newRecording = {
+        id: Date.now(),
+        streamer: streamer.name,
+        startTime: new Date().toISOString(),
+        status: 'Grabando'
+      };
+      
+      const updated = streamers.map(s => 
+        s.id === id 
+          ? { ...s, recordings: [...s.recordings, newRecording] }
+          : s
+      );
+      setStreamers(updated);
+      saveStreamers(updated);
+    }
+  };
+
+  const checkLiveStatus = (id) => {
+    const updated = streamers.map(s => 
+      s.id === id 
+        ? { ...s, isLive: !s.isLive, lastChecked: new Date().toISOString() }
+        : s
+    );
+    setStreamers(updated);
+    saveStreamers(updated);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 bg-clip-text text-transparent">
+              Stream Recorder
+            </h1>
+            <p className="text-gray-400 mt-2">Gestiona y graba tus transmisiones favoritas</p>
+          </div>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className="p-3 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            <Settings className="w-6 h-6" />
+          </button>
+        </div>
+
+        {/* Settings Panel */}
+        {showSettings && (
+          <div className="bg-gray-800 rounded-xl p-6 mb-6 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4">Configuración</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Carpeta de salida</label>
+                <input
+                  type="text"
+                  value={settings.outputFolder}
+                  onChange={(e) => {
+                    const updated = { ...settings, outputFolder: e.target.value };
+                    setSettings(updated);
+                    saveSettings(updated);
+                  }}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Calidad de grabación</label>
+                <select
+                  value={settings.quality}
+                  onChange={(e) => {
+                    const updated = { ...settings, quality: e.target.value };
+                    setSettings(updated);
+                    saveSettings(updated);
+                  }}
+                  className="w-full bg-gray-700 text-white px-4 py-2 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                >
+                  <option value="best">Mejor calidad</option>
+                  <option value="high">Alta (1080p)</option>
+                  <option value="medium">Media (720p)</option>
+                  <option value="low">Baja (480p)</option>
+                </select>
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.autoRecord}
+                  onChange={(e) => {
+                    const updated = { ...settings, autoRecord: e.target.checked };
+                    setSettings(updated);
+                    saveSettings(updated);
+                  }}
+                  className="w-5 h-5 rounded text-purple-500 focus:ring-2 focus:ring-purple-500"
+                />
+                <label className="ml-3 text-sm text-gray-300">Grabar automáticamente cuando detecte transmisión en vivo</label>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add New Streamer */}
+        <div className="bg-gray-800 rounded-xl p-6 mb-6 border border-gray-700">
+          <h2 className="text-xl font-semibold mb-4">Agregar nueva transmisión</h2>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="https://es.stripchat.com/nombre-del-modelo"
+              className="flex-1 bg-gray-700 text-white px-4 py-3 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+              onKeyPress={(e) => e.key === 'Enter' && addStreamer()}
+            />
+            <button
+              onClick={addStreamer}
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 rounded-lg font-semibold transition-all flex items-center gap-2"
+            >
+              <Plus className="w-5 h-5" />
+              Agregar
+            </button>
+          </div>
+        </div>
+
+        {/* Streamers List */}
+        <div className="space-y-4">
+          {streamers.length === 0 ? (
+            <div className="bg-gray-800 rounded-xl p-12 text-center border border-gray-700">
+              <Download className="w-16 h-16 mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400 text-lg">No hay transmisiones agregadas</p>
+              <p className="text-gray-500 mt-2">Agrega una URL arriba para comenzar</p>
+            </div>
+          ) : (
+            streamers.map((streamer) => (
+              <div
+                key={streamer.id}
+                className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-purple-500 transition-all"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className={`w-3 h-3 rounded-full ${streamer.isLive ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
+                    <div>
+                      <h3 className="text-xl font-semibold">{streamer.name}</h3>
+                      <p className="text-gray-400 text-sm mt-1 break-all">{streamer.url}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => checkLiveStatus(streamer.id)}
+                      className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
+                      title="Verificar estado en vivo"
+                    >
+                      {streamer.isLive ? <Radio className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
+                    </button>
+                    <button
+                      onClick={() => toggleRecording(streamer.id)}
+                      className={`p-2 rounded-lg transition-colors ${
+                        recording[streamer.id]
+                          ? 'bg-red-500 hover:bg-red-600'
+                          : 'bg-purple-500 hover:bg-purple-600'
+                      }`}
+                      title={recording[streamer.id] ? 'Detener grabación' : 'Iniciar grabación'}
+                    >
+                      {recording[streamer.id] ? <Square className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                    </button>
+                    <button
+                      onClick={() => removeStreamer(streamer.id)}
+                      className="p-2 bg-gray-700 hover:bg-red-600 rounded-lg transition-colors"
+                      title="Eliminar"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Recording Status */}
+                {recording[streamer.id] && (
+                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                      <span className="text-red-400 font-medium">Grabando ahora...</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recordings History */}
+                {streamer.recordings && streamer.recordings.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-gray-700">
+                    <h4 className="text-sm font-semibold text-gray-400 mb-2">Grabaciones ({streamer.recordings.length})</h4>
+                    <div className="space-y-2">
+                      {streamer.recordings.slice(-3).map((rec) => (
+                        <div key={rec.id} className="flex items-center justify-between bg-gray-700/50 rounded-lg p-2 text-sm">
+                          <span className="text-gray-300">
+                            {new Date(rec.startTime).toLocaleString('es-ES')}
+                          </span>
+                          <span className="text-purple-400">{rec.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Info Note */}
+        <div className="mt-8 bg-blue-500/10 border border-blue-500/30 rounded-xl p-4">
+          <p className="text-blue-400 text-sm">
+            <strong>Nota:</strong> Esta es una interfaz de demostración. Para grabar realmente, necesitarás instalar herramientas como 
+            <span className="font-mono mx-1">yt-dlp</span> o <span className="font-mono mx-1">streamlink</span> en tu sistema Windows 
+            y configurar los comandos de grabación apropiados.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
